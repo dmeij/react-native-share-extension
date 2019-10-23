@@ -1,5 +1,6 @@
 package com.alinz.parkerdan.shareextension;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
@@ -8,6 +9,8 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.content.ContentUris;
 import android.os.Environment;
+import android.util.Log;
+import android.webkit.MimeTypeMap;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -173,13 +176,17 @@ public class RealPathUtil {
     String filePath;
     InputStream inputStream = null;
     BufferedOutputStream outStream = null;
-    try {
+    try
+    {
         inputStream = context.getContentResolver().openInputStream(uri);
 
+        ContentResolver cR = context.getContentResolver();
+        MimeTypeMap mime = MimeTypeMap.getSingleton();
+        String extension = mime.getExtensionFromMimeType(cR.getType(uri));
+
         File extDir = context.getExternalFilesDir(null);
-        filePath = extDir.getAbsolutePath() + "/IMG_" + UUID.randomUUID().toString() + ".jpg";
-        outStream = new BufferedOutputStream(new FileOutputStream
-                (filePath));
+        filePath = extDir.getAbsolutePath() + "/TEMP_" + UUID.randomUUID().toString() + "." + extension;
+        outStream = new BufferedOutputStream(new FileOutputStream(filePath));
 
         byte[] buf = new byte[2048];
         int len;
