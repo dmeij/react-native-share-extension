@@ -14,6 +14,16 @@ NSExtensionContext* extensionContext;
     NSString* value;
 }
 
+- (BOOL)isContentValid {
+    // Do validation of contentText and/or NSExtensionContext attachments here
+    return YES;
+}
+
++ (BOOL)requiresMainQueueSetup
+{
+    return YES;
+}
+
 - (UIView*) shareView {
     return nil;
 }
@@ -55,74 +65,82 @@ RCT_REMAP_METHOD(data,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self extractDataFromContext: extensionContext withCallback:^(NSString* val, NSString* contentType, NSException* err) {
-        if(err) {
+    [self extractDataFromContext: extensionContext withCallback:^(NSMutableArray* media, NSString* text, NSException* err) {
+        if(err)
             reject(@"error", err.description, nil);
-        } else {
+        else
+		{
+			if(text == nil)
+				text = @"";
+
             resolve(@{
-                      @"type": contentType,
-                      @"value": val
+                      @"media": media,
+					  @"text": text
                       });
         }
     }];
 }
 
-- (void)extractDataFromContext:(NSExtensionContext *)context withCallback:(void(^)(NSString *value, NSString* contentType, NSException *exception))callback {
+- (void)extractDataFromContext:(NSExtensionContext *)context withCallback:(void(^)(NSMutableArray *media, NSString* text, NSException *exception))callback {
+    
     @try {
-        NSExtensionItem *item = [context.inputItems firstObject];
-        NSArray *attachments = item.attachments;
-
-        __block NSItemProvider *urlProvider = nil;
-        __block NSItemProvider *imageProvider = nil;
-        __block NSItemProvider *textProvider = nil;
+        NSExtensionItem *item 			= [context.inputItems firstObject];
+        NSArray *attachments 			= item.attachments;
+		__block int amount				= 0;
+		__block int success				= 0;
+		__block NSMutableArray *media	= [[NSMutableArray alloc] init];
+		__block NSString *text			= nil;
 
         [attachments enumerateObjectsUsingBlock:^(NSItemProvider *provider, NSUInteger idx, BOOL *stop) {
-            if([provider hasItemConformingToTypeIdentifier:URL_IDENTIFIER]) {
-                urlProvider = provider;
-                *stop = YES;
-            } else if ([provider hasItemConformingToTypeIdentifier:TEXT_IDENTIFIER]){
-                textProvider = provider;
-                *stop = YES;
-            } else if ([provider hasItemConformingToTypeIdentifier:IMAGE_IDENTIFIER]){
-                imageProvider = provider;
-                *stop = YES;
-            }
+			amount++;
+			
+			if ([provider hasItemConformingToTypeIdentifier:TEXT_IDENTIFIER])
+			{
+				[provider loadItemForTypeIdentifier:TEXT_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
+					text = (NSString *)item;
+					
+					success++;
+					
+					if(success == amount)
+						callback(media, text, nil);
+				}];
+				
+				*stop = YES;
+			}
+			else if ([provider hasItemConformingToTypeIdentifier:URL_IDENTIFIER])
+			{
+				[provider loadItemForTypeIdentifier:URL_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
+					text = [(NSURL *)item absoluteString];
+					
+					success++;
+					
+					if(success == amount)
+						callback(media, text, nil);
+				}];
+				
+				*stop = YES;
+			}
+			else if ([provider hasItemConformingToTypeIdentifier:IMAGE_IDENTIFIER])
+			{
+				[provider loadItemForTypeIdentifier:IMAGE_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
+					NSURL *url = (NSURL *)item;
+					
+					[media addObject:[url absoluteString]];
+					
+					success++;
+					
+					if(success == amount)
+						callback(media, text, nil);
+				}];
+			}
+			else
+				amount--;
         }];
-
-        if(urlProvider) {
-            [urlProvider loadItemForTypeIdentifier:URL_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
-                NSURL *url = (NSURL *)item;
-
-                if(callback) {
-                    callback([url absoluteString], @"text/plain", nil);
-                }
-            }];
-        } else if (imageProvider) {
-            [imageProvider loadItemForTypeIdentifier:IMAGE_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
-                NSURL *url = (NSURL *)item;
-
-                if(callback) {
-                    callback([url absoluteString], [[[url absoluteString] pathExtension] lowercaseString], nil);
-                }
-            }];
-        } else if (textProvider) {
-            [textProvider loadItemForTypeIdentifier:TEXT_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
-                NSString *text = (NSString *)item;
-
-                if(callback) {
-                    callback(text, @"text/plain", nil);
-                }
-            }];
-        } else {
-            if(callback) {
-                callback(nil, nil, [NSException exceptionWithName:@"Error" reason:@"couldn't find provider" userInfo:nil]);
-            }
-        }
     }
-    @catch (NSException *exception) {
-        if(callback) {
-            callback(nil, nil, exception);
-        }
+    @catch (NSException *exception)
+	{
+        if(callback)
+			callback(nil, nil, exception);
     }
 }
 
