@@ -83,12 +83,12 @@ RCT_REMAP_METHOD(data,
 		
 		for(NSItemProvider *provider in attachments)
 		{
-			if ([provider hasItemConformingToTypeIdentifier:TEXT_IDENTIFIER])
+            if([provider hasItemConformingToTypeIdentifier:URL_IDENTIFIER])
+                [[providers objectForKey:@"url"] addObject:provider];
+			else if ([provider hasItemConformingToTypeIdentifier:TEXT_IDENTIFIER])
 				[[providers objectForKey:@"txt"] addObject:provider];
             else if ([provider hasItemConformingToTypeIdentifier:IMAGE_IDENTIFIER])
 				[[providers objectForKey:@"image"] addObject:provider];
-			else if([provider hasItemConformingToTypeIdentifier:URL_IDENTIFIER])
-				[[providers objectForKey:@"url"] addObject:provider];
 			else if([provider hasItemConformingToTypeIdentifier:MOVIE_IDENTIFIER])
 				[[providers objectForKey:@"video"] addObject:provider];
 		}
@@ -120,16 +120,29 @@ RCT_REMAP_METHOD(data,
 			}
 		
 		if([providers[@"txt"] count] > 0)
-			for(NSItemProvider* provider in providers[@"txt"])
+            for(NSItemProvider* provider in providers[@"txt"])
 			{
 				[provider loadItemForTypeIdentifier:TEXT_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
-					[items addObject:(NSString *)item];
+                    NSString *text = (NSString *)item;
+					[items addObject:text];
 
-					if(callback && [items count] == ([providers[@"txt"] count] + [providers[@"image"] count] + [providers[@"video"] count] + [providers[@"url"] count])) {
+                    if(callback && [items count] == ([providers[@"txt"] count] + [providers[@"image"] count] + [providers[@"video"] count] + [providers[@"url"] count])) {
 						callback(items, @"text/plain", nil);
 					}
 				}];
 			}
+        
+        if([providers[@"url"] count] > 0)
+            for(NSItemProvider* provider in providers[@"url"])
+            {
+                [provider loadItemForTypeIdentifier:TEXT_IDENTIFIER options:nil completionHandler:^(id<NSSecureCoding> item, NSError *error) {
+                    [items addObject:(NSString *)item];
+
+                    if(callback && [items count] == ([providers[@"txt"] count] + [providers[@"image"] count] + [providers[@"video"] count] + [providers[@"url"] count])) {
+                        callback(items, @"text/url", nil);
+                    }
+                }];
+            }
     }
     @catch (NSException *exception) {
         if(callback) {
